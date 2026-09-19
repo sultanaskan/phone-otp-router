@@ -1,6 +1,6 @@
 const Otp = require('../models/Otp');
+const { Op } = require("sequelize");
 
-// GET /otp/get?phone=XXXXX
 const getOtp = async (req, res) => {
   try {
     const { sender, receiver } = req.query;
@@ -17,21 +17,31 @@ const getOtp = async (req, res) => {
     const startTime = Date.now();
     let otpRecord = null;
 
+    // Substring matching condition
+    const whereCondition = {
+      sender: { [Op.like]: `%${sender}%` },
+      receiver: { [Op.like]: `%${receiver}%` }
+    };
+
     while (Date.now() - startTime < timeout) {
       otpRecord = await Otp.findOne({
-      where: { sender, receiver },
+        where: whereCondition,
         order: [['createdAt', 'DESC']]
       });
 
-      if (otpRecord) {break;}
+      if (otpRecord) { break; }
 
       await new Promise(resolve => setTimeout(resolve, interval));
     }
 
-    if (!otpRecord) {return res.status(404).json({ error: "No OTP found within 30 seconds" });}
-    await Otp.destroy({ where: {sender, receiver}});
+    if (!otpRecord) {
+      return res.status(404).json({ error: "No OTP found within 30 seconds" });
+    }
 
-    if (!otpRecord) {return res.status(404).json({ error: "No OTP found for this phone number" });}
+    // matched record মুছে ফেলার কন্ডিশন
+    await Otp.destroy({
+      where: whereCondition
+    });
 
     res.status(200).json({
       sender: otpRecord.sender,
@@ -43,7 +53,6 @@ const getOtp = async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 };
-
 // POST /otp/set
 const setOtp = async (req, res) => {
   try {
