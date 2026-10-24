@@ -4,7 +4,8 @@
     "description": "A simple Node.js HTTP server",
     "main": "server.js",
     "scripts": {
-        "scripts": "node server.js"
+        "start": "node server.js",
+        "dev": "node --watch server.js"
     },
     "keywords": [],
     "author": "MD ASKAN ALI",

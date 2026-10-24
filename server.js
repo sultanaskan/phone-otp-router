@@ -1,6 +1,7 @@
 const express = require('express');
 const sequelize = require('./config/database');
 const otpRoutes = require('./routes/otpRoutes');
+const healthRoutes = require('./routes/healthRoutes');
 require('dotenv').config();
 
 const app = express();
@@ -8,6 +9,7 @@ const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
 
+app.use('/health', healthRoutes);
 // রুটিং
 app.use('/otp', otpRoutes);
 

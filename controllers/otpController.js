@@ -75,7 +75,22 @@ const setOtp = async (req, res) => {
   }
 };
 
+const deleteReceiverOtps = async (req, res) => {
+  try {
+    const { receiver } = req.query;
+    if (typeof receiver !== 'string' || !receiver.trim()) {
+      return res.status(400).json({ error: 'Receiver is required' });
+    }
+
+    const deletedCount = await Otp.destroy({ where: { receiver } });
+    return res.status(200).json({ success: true, receiver, deletedCount });
+  } catch (error) {
+    return res.status(500).json({ error: 'Unable to delete receiver records' });
+  }
+};
+
 module.exports = {
   getOtp,
-  setOtp
+  setOtp,
+  deleteReceiverOtps
 };
