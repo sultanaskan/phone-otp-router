@@ -1,7 +1,8 @@
 const express = require('express');
 const sequelize = require('./config/database');
-const otpRoutes = require('./routes/otpRoutes');
+const smsRoutes = require('./routes/smsRoutes');
 const healthRoutes = require('./routes/healthRoutes');
+const { startMessageCleanup } = require('./services/messageCleanup');
 require('dotenv').config();
 
 const app = express();
@@ -11,7 +12,7 @@ app.use(express.json());
 
 app.use('/health', healthRoutes);
 // রুটিং
-app.use('/otp', otpRoutes);
+app.use('/sms', smsRoutes);
 
 sequelize.authenticate()
   .then(() => {
@@ -19,6 +20,7 @@ sequelize.authenticate()
     return sequelize.sync(); 
   })
   .then(() => {
+    startMessageCleanup();
     app.listen(PORT, () => {
       console.log(`Server is running on port ${PORT}`);
     });

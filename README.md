@@ -1,21 +1,21 @@
-# Phone OTP Server
+# SMSRouter
 
-A small Express service that stores OTP messages in MySQL and lets a client retrieve a matching message. The service does not generate OTPs or send SMS; an upstream sender is expected to call the write endpoint after receiving or generating a message.
+SMSRouter is a lightweight Express service for receiving, retrieving, and deleting SMS message records. It stores messages in MySQL and does not send SMS itself.
 
 ## Requirements
 
-- Node.js 18 or later (Express 5)
+- Node.js 18 or later
 - MySQL 5.7+ or a compatible MySQL server
 - npm
 
 ## Setup
 
-1. Install dependencies: `npm install`
-2. Copy `.env.example` to `.env` and fill in the database connection values.
-3. Create the configured MySQL database and ensure the configured user can connect and create/alter tables.
-4. Start the server: `npm start` (or `npm run dev` for Node's watch mode).
+1. Install dependencies with `npm install`.
+2. Copy `.env.example` to `.env` and set the database connection values.
+3. Create the configured MySQL database and grant the configured user access.
+4. Start with `npm start`; use `npm run dev` during development.
 
-At startup, the server authenticates to MySQL and calls Sequelize `sync()` before listening. If the database connection or synchronization fails, the server logs the error and does not start listening.
+The server authenticates to MySQL and runs Sequelize synchronization before accepting requests. It also removes messages older than five minutes at startup and once per minute. Expired messages are excluded from retrieval immediately, even before physical cleanup.
 
 ## Configuration
 
@@ -28,117 +28,62 @@ At startup, the server authenticates to MySQL and calls Sequelize `sync()` befor
 | `DB_USER` | Yes | — | Database username |
 | `DB_PASSWORD` | Yes | — | Database password |
 
-Keep `.env` local. Never commit credentials or paste them into logs, issues, or agent prompts. `.env.example` contains placeholders only.
+Keep `.env` local and never commit credentials.
 
 ## API
 
-### Check server and database health
+### Health
 
-`GET /health` checks whether the HTTP service is responding and whether Sequelize can authenticate to MySQL. It does not read or change OTP records.
-
-When both checks pass, the endpoint returns HTTP `200`:
-
-```json
-{
-  "status": "ok",
-  "checks": {
-    "server": "ok",
-    "database": "ok"
-  }
-}
-```
-
-If the server is running but the database check fails, it returns HTTP `503` with `status: "error"`, `server: "ok"`, and `database: "error"`. It deliberately omits the underlying database error. If the server process itself is stopped or unreachable, callers receive a connection error or timeout instead of JSON.
-
-Call it from another application or monitoring service using the deployed base URL:
+`GET /health` checks that the service responds and can connect to MySQL. It returns `200` with `{ "status": "ok", "checks": { "server": "ok", "database": "ok" } }` when healthy, or `503` when the database check fails. It does not access stored message contents.
 
 ```bash
 curl -i https://your-domain.example/health
 ```
 
-In JavaScript:
+### Save a message
 
-```js
-const response = await fetch('https://your-domain.example/health');
-const health = await response.json();
-
-if (!response.ok || health.status !== 'ok') {
-  console.error('OTP service is unhealthy', health);
-} else {
-  console.log('OTP service and database are healthy');
-}
-```
-
-Use the HTTP status as the primary signal: `200` means healthy, `503` means the service answered but its database check failed, and a timeout/network error means the service could not be reached. Avoid polling it excessively; a periodic check every 30–60 seconds is usually sufficient for basic monitoring.
-
-### Save an OTP message
-
-`POST /otp/set` with JSON:
+`POST /sms/set` with JSON:
 
 ```json
 {
   "sender": "+15550001111",
   "receiver": "+15550002222",
-  "message": "Your verification code is 123456"
+  "message": "Your delivery is scheduled for tomorrow"
 }
 ```
 
-All three fields are required. A successful request returns HTTP `201` and the saved row, including its database ID and timestamps. Missing fields return `400`.
+All fields are required. A successful request returns `201` and the saved record.
 
-### Retrieve an OTP message
+### Retrieve a message
 
-`GET /otp/get?sender=%2B15550001111&receiver=%2B15550002222`
+`GET /sms/get?sender=%2B15550001111&receiver=%2B15550002222`
 
-Both query parameters are required. The handler checks the database immediately, then retries every two seconds for up to 30 seconds. On a match it returns `sender`, `receiver`, `message`, and `createdAt`. If no match appears it returns `404`.
+Both query parameters are required. The service checks immediately, then retries every two seconds for up to 30 seconds. It returns the newest matching message created within the last five minutes, or `404` if none is found. Matching currently uses substring matching. On success, all records matching the sender and receiver substring conditions are deleted.
 
-Current matching uses SQL `LIKE` with wildcards around both supplied values (substring matching). On retrieval, the handler deletes all rows matching those same substring conditions, not only the row returned. Clients should therefore use distinctive values, and maintainers should treat this behavior as compatibility-sensitive until deliberately changed.
+### Delete messages for a receiver
 
-### Delete all OTP records for a receiver
-
-`DELETE /otp/receiver?receiver=...` deletes every OTP record whose `receiver` exactly matches the supplied number. A successful request returns HTTP `200` with the requested receiver and `deletedCount`. A missing or blank receiver returns `400`; database failures return `500`. This endpoint has no authentication, so keep it on a trusted network or behind an access-controlled proxy.
-
-Example with curl:
+`DELETE /sms/receiver?receiver=...` permanently deletes all records whose receiver exactly matches the supplied number. It returns `200` with `deletedCount`; a missing or blank receiver returns `400`.
 
 ```bash
-curl -X DELETE 'https://your-domain.example/otp/receiver?receiver=%2B15550002222'
+curl -X DELETE 'https://your-domain.example/sms/receiver?receiver=%2B15550002222'
 ```
 
-Example from another JavaScript application:
-
-```js
-const params = new URLSearchParams({ receiver: '+15550002222' });
-const response = await fetch(`https://your-domain.example/otp/receiver?${params}`, {
-  method: 'DELETE'
-});
-const result = await response.json();
-
-if (!response.ok) {
-  throw new Error(result.error || 'Could not delete receiver records');
-}
-
-console.log(`Deleted ${result.deletedCount} record(s)`);
-```
-
-The endpoint matches the receiver exactly, not by substring. Because it is unauthenticated, do not expose it to untrusted clients or the public internet.
+This endpoint has no authentication. Keep it on a trusted network or place it behind an access-controlled proxy; do not expose it to untrusted clients or the public internet.
 
 ## Project map
 
-- `server.js` — Express setup, route mounting, database startup and listener.
-- `routes/otpRoutes.js` — HTTP route declarations under `/otp`.
-- `controllers/otpController.js` — request validation, polling, persistence and response behavior.
-- `models/Otp.js` — Sequelize OTP table definition (`sender`, `receiver`, `message`, timestamps).
+- `server.js` — Express setup, route mounting, database startup, and listener.
+- `routes/smsRoutes.js` — message API routes.
+- `controllers/smsController.js` — validation, polling, persistence, and response behavior.
+- `models/SmsMessage.js` — stored message fields (`sender`, `receiver`, `message`, timestamps).
+- `services/messageCleanup.js` and `config/messageRetention.js` — five-minute retention and scheduled cleanup.
 - `config/database.js` — Sequelize MySQL connection and pool configuration.
-- `models/Sender.js`, `models/Receiver.js` — currently unused model files; do not assume they participate in runtime behavior.
 
-## Development and maintenance
+## Maintenance notes
 
-- Keep API behavior and response shapes documented here when changing them.
-- Prefer exact matching and deleting only the consumed record in a future behavior change, but plan it explicitly because clients may depend on current substring matching and cleanup semantics.
-- Do not store real OTPs longer than needed. Consider expiry, rate limiting, authentication, request size limits, and log redaction before exposing this service publicly.
-- Use migrations for production schema changes rather than relying on automatic `sequelize.sync()`; schema synchronization is currently part of startup behavior.
-- Keep credentials out of source control. Review `git diff` for secrets before committing.
-- No automated test or lint command is configured yet. Add focused coverage when changing controller, matching, deletion, or startup behavior.
-
-## Current scope and limitations
-
-There is no authentication, authorization, OTP generation/SMS integration, expiry policy, cleanup job, or automated test suite in the repository at present. The health endpoint is public and reveals only coarse server/database status. The OTP request handlers return raw error messages for server errors; review that behavior before public deployment.
+- Keep API paths and response shapes documented when they change.
+- Clients should use the `/sms` API routes documented above.
+- Existing installations keep their current database table mapping so stored records remain available after this application rename.
+- Production schema changes should use migrations rather than relying on automatic synchronization.
+- No automated test or lint command is currently configured.
+- The service has no authentication, SMS delivery integration, rate limiting, or request throttling. Review access controls before public deployment.

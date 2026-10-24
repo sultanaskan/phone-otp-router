@@ -1,0 +1,4 @@
+module.exports = {
+  MESSAGE_RETENTION_MS: 5 * 60 * 1000,
+  CLEANUP_INTERVAL_MS: 60 * 1000
+};

@@ -1,7 +1,8 @@
-const Otp = require('../models/Otp');
+const SmsMessage = require('../models/SmsMessage');
 const { Op } = require("sequelize");
+const { MESSAGE_RETENTION_MS } = require('../config/messageRetention');
 
-const getOtp = async (req, res) => {
+const getMessage = async (req, res) => {
   try {
     const { sender, receiver } = req.query;
 
@@ -15,7 +16,7 @@ const getOtp = async (req, res) => {
     const timeout = 30000;
     const interval = 2000; 
     const startTime = Date.now();
-    let otpRecord = null;
+    let messageRecord = null;
 
     // Substring matching condition
     const whereCondition = {
@@ -24,73 +25,76 @@ const getOtp = async (req, res) => {
     };
 
     while (Date.now() - startTime < timeout) {
-      otpRecord = await Otp.findOne({
-        where: whereCondition,
+      const expiresAfter = new Date(Date.now() - MESSAGE_RETENTION_MS);
+      messageRecord = await SmsMessage.findOne({
+        where: {
+          ...whereCondition,
+          createdAt: { [Op.gte]: expiresAfter }
+        },
         order: [['createdAt', 'DESC']]
       });
 
-      if (otpRecord) { break; }
+      if (messageRecord) { break; }
 
       await new Promise(resolve => setTimeout(resolve, interval));
     }
 
-    if (!otpRecord) {
-      return res.status(404).json({ error: "No OTP found within 30 seconds" });
+    if (!messageRecord) {
+      return res.status(404).json({ error: "No message found within 30 seconds" });
     }
 
     // matched record মুছে ফেলার কন্ডিশন
-    await Otp.destroy({
+    await SmsMessage.destroy({
       where: whereCondition
     });
 
     res.status(200).json({
-      sender: otpRecord.sender,
-      receiver: otpRecord.receiver,
-      message: otpRecord.message,
-      createdAt: otpRecord.createdAt
+      sender: messageRecord.sender,
+      receiver: messageRecord.receiver,
+      message: messageRecord.message,
+      createdAt: messageRecord.createdAt
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 };
-// POST /otp/set
-const setOtp = async (req, res) => {
+// POST /sms/set
+const setMessage = async (req, res) => {
   try {
     const { sender, receiver, message } = req.body;
 
     if (!sender || !receiver || !message) {
-      return res.status(400).json({ error: "Both phone and otp are required" });
+      return res.status(400).json({ error: "Sender, receiver, and message are required" });
     }
 
-    // ডাটাবেসে নতুন OTP সেভ করা
-    const newOtp = await Otp.create({ sender, receiver, message });
+    const newMessage = await SmsMessage.create({ sender, receiver, message });
 
     res.status(201).json({
       success: true,
-      message: "OTP saved to database successfully",
-      data: newOtp
+      message: "Message saved successfully",
+      data: newMessage
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 };
 
-const deleteReceiverOtps = async (req, res) => {
+const deleteReceiverMessages = async (req, res) => {
   try {
     const { receiver } = req.query;
     if (typeof receiver !== 'string' || !receiver.trim()) {
       return res.status(400).json({ error: 'Receiver is required' });
     }
 
-    const deletedCount = await Otp.destroy({ where: { receiver } });
+    const deletedCount = await SmsMessage.destroy({ where: { receiver } });
     return res.status(200).json({ success: true, receiver, deletedCount });
   } catch (error) {
-    return res.status(500).json({ error: 'Unable to delete receiver records' });
+    return res.status(500).json({ error: 'Unable to delete receiver messages' });
   }
 };
 
 module.exports = {
-  getOtp,
-  setOtp,
-  deleteReceiverOtps
+  getMessage,
+  setMessage,
+  deleteReceiverMessages
 };

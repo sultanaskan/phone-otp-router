@@ -1,7 +1,7 @@
 const { DataTypes } = require('sequelize');
 const sequelize = require('../config/database');
 
-const Otp = sequelize.define('Otp', {
+const SmsMessage = sequelize.define('SmsMessage', {
   id: {
     type: DataTypes.INTEGER,
     autoIncrement: true,
@@ -20,7 +20,9 @@ const Otp = sequelize.define('Otp', {
     allowNull: false
   }
 }, {
-  timestamps: true 
+  timestamps: true,
+  // Keep the current table so existing stored messages remain available.
+  tableName: 'Otps'
 });
 
-module.exports = Otp;
+module.exports = SmsMessage;
