@@ -13,7 +13,7 @@ SMSRouter is a small Express service that stores SMS message records in MySQL us
 
 ## Change guidance
 - Preserve existing API paths, required fields, status codes, and response shapes unless the task explicitly calls for a behavior change. Update `README.md` when the contract changes.
-- Message retrieval currently uses substring matching and deletes every row matching those sender/receiver conditions. Treat changes to this behavior as compatibility-sensitive.
+- Message retrieval currently uses substring matching and deletes every row matching those sender/receiver conditions after a successful retrieval. Treat changes to this behavior as compatibility-sensitive.
 - Messages expire five minutes after `createdAt`; retrieval must exclude expired records even if scheduled cleanup has not run yet.
 - The receiver-wide delete endpoint is destructive and unauthenticated. Do not expose it to untrusted networks; call out this exposure if deployment context makes it relevant.
 - Do not log message contents, phone numbers, passwords, connection strings, or other secrets. Do not read, print, or commit `.env`; use `.env.example` for configuration documentation.

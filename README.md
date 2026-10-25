@@ -58,7 +58,7 @@ All fields are required. A successful request returns `201` and the saved record
 
 `GET /sms/get?sender=%2B15550001111&receiver=%2B15550002222`
 
-Both query parameters are required. The service checks immediately, then retries every two seconds for up to 30 seconds. It returns the newest matching message created within the last five minutes, or `404` if none is found. Matching currently uses substring matching. On success, all records matching the sender and receiver substring conditions are deleted.
+Both query parameters are required. The service checks immediately, then retries every two seconds for up to 30 seconds. It returns the newest matching message created within the last five minutes, or `404` if none is found. Matching currently uses substring matching. After a successful retrieval, all records matching the sender and receiver substring conditions are deleted immediately. Records not retrieved are removed after five-minute retention by the cleanup job.
 
 ### Delete messages for a receiver
 

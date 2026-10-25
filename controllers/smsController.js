@@ -43,7 +43,7 @@ const getMessage = async (req, res) => {
       return res.status(404).json({ error: "No message found within 30 seconds" });
     }
 
-    // matched record মুছে ফেলার কন্ডিশন
+    // Consume all matching sender/receiver records after a successful retrieval.
     await SmsMessage.destroy({
       where: whereCondition
     });
